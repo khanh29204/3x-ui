@@ -2,7 +2,13 @@
 
 set -e
 
-# Kiến trúc cần build
+# --- BỔ SUNG: Dọn dẹp import thừa trước khi build ---
+echo "==> Cleaning up unused imports and formatting code..."
+go mod tidy
+# Nếu bạn đã cài goimports, hãy bỏ comment dòng dưới
+# goimports -w . 
+# ---------------------------------------------------
+
 targets=(
   "linux amd64"
   "linux 386"
@@ -14,10 +20,7 @@ targets=(
   "windows amd64"
 )
 
-# Xác định file entrypoint Go
 ENTRYPOINT="."
-
-# Tạo thư mục output
 mkdir -p dist
 
 for target in "${targets[@]}"; do
@@ -28,32 +31,33 @@ for target in "${targets[@]}"; do
 
   echo "==> Building for $GOOS/$GOARCH $([ -n "$GOARM" ] && echo "v$GOARM")"
 
-  # Thiết lập biến môi trường cross-compile
   export GOOS=$GOOS
   export GOARCH=$GOARCH
   export GOARM=$GOARM
 
-  # Tạo thư mục tạm
   BUILD_DIR="build/${FILENAME}"
   mkdir -p "$BUILD_DIR"
 
-  # Build binary
   OUT_BIN="$BUILD_DIR/x-ui"
   [ "$GOOS" = "windows" ] && OUT_BIN="$BUILD_DIR/x-ui.exe"
-  go build -ldflags="-s -w" -o "$OUT_BIN" "$ENTRYPOINT"
 
-  # Copy file cần thiết
+  # Chạy build và bắt lỗi nếu có
+  if ! go build -ldflags="-s -w" -o "$OUT_BIN" "$ENTRYPOINT"; then
+      echo "ERROR: Build failed for $GOOS/$GOARCH"
+      exit 1
+  fi
+
+  # Copy file (Sử dụng thêm các cờ để tránh lỗi file không tồn tại)
   mkdir -p "$BUILD_DIR/bin"
-  cp -r "bin/xray-linux-${GOARCH}" "$BUILD_DIR/bin/" 2>/dev/null || true
-  cp x-ui.service "$BUILD_DIR/" 2>/dev/null || true
-
-  # Tạo file nén
+  cp -r bin/xray-${GOOS}-${GOARCH}* "$BUILD_DIR/bin/" 2>/dev/null || true
+  
   if [ "$GOOS" = "windows" ]; then
-    zip -r "dist/${FILENAME}.zip" -j "$BUILD_DIR"/*
+    zip -r "dist/${FILENAME}.zip" -j "$BUILD_DIR"/* > /dev/null
   else
     tar -czf "dist/${FILENAME}.tar.gz" -C "$BUILD_DIR" .
   fi
 
-  # Dọn dẹp build tạm
   rm -rf "$BUILD_DIR"
 done
+
+echo "==> All builds completed in ./dist"

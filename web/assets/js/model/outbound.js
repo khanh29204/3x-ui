@@ -8,7 +8,8 @@ const Protocols = {
     Shadowsocks: "shadowsocks",
     Socks: "socks",
     HTTP: "http",
-    Wireguard: "wireguard"
+    Wireguard: "wireguard",
+    Hysteria: "hysteria"
 };
 
 const SSMethods = {
@@ -165,14 +166,12 @@ class TcpStreamSettings extends CommonClass {
 class KcpStreamSettings extends CommonClass {
     constructor(
         mtu = 1350,
-        tti = 50,
+        tti = 20,
         uplinkCapacity = 5,
         downlinkCapacity = 20,
         congestion = false,
-        readBufferSize = 2,
-        writeBufferSize = 2,
-        type = 'none',
-        seed = '',
+        readBufferSize = 1,
+        writeBufferSize = 1,
     ) {
         super();
         this.mtu = mtu;
@@ -182,8 +181,6 @@ class KcpStreamSettings extends CommonClass {
         this.congestion = congestion;
         this.readBuffer = readBufferSize;
         this.writeBuffer = writeBufferSize;
-        this.type = type;
-        this.seed = seed;
     }
 
     static fromJson(json = {}) {
@@ -195,8 +192,6 @@ class KcpStreamSettings extends CommonClass {
             json.congestion,
             json.readBufferSize,
             json.writeBufferSize,
-            ObjectUtil.isEmpty(json.header) ? 'none' : json.header.type,
-            json.seed,
         );
     }
 
@@ -209,17 +204,13 @@ class KcpStreamSettings extends CommonClass {
             congestion: this.congestion,
             readBufferSize: this.readBuffer,
             writeBufferSize: this.writeBuffer,
-            header: {
-                type: this.type,
-            },
-            seed: this.seed,
         };
     }
 }
 
 class WsStreamSettings extends CommonClass {
     constructor(
-        path = '/', 
+        path = '/',
         host = '',
         heartbeatPeriod = 0,
 
@@ -354,13 +345,19 @@ class TlsStreamSettings extends CommonClass {
         serverName = '',
         alpn = [],
         fingerprint = '',
-        allowInsecure = false
+        allowInsecure = false,
+        echConfigList = '',
+        verifyPeerCertByName = 'cloudflare-dns.com',
+        pinnedPeerCertSha256 = '',
     ) {
         super();
         this.serverName = serverName;
         this.alpn = alpn;
         this.fingerprint = fingerprint;
         this.allowInsecure = allowInsecure;
+        this.echConfigList = echConfigList;
+        this.verifyPeerCertByName = verifyPeerCertByName;
+        this.pinnedPeerCertSha256 = pinnedPeerCertSha256;
     }
 
     static fromJson(json = {}) {
@@ -369,6 +366,9 @@ class TlsStreamSettings extends CommonClass {
             json.alpn,
             json.fingerprint,
             json.allowInsecure,
+            json.echConfigList,
+            json.verifyPeerCertByName,
+            json.pinnedPeerCertSha256,
         );
     }
 
@@ -378,6 +378,9 @@ class TlsStreamSettings extends CommonClass {
             alpn: this.alpn,
             fingerprint: this.fingerprint,
             allowInsecure: this.allowInsecure,
+            echConfigList: this.echConfigList,
+            verifyPeerCertByName: this.verifyPeerCertByName,
+            pinnedPeerCertSha256: this.pinnedPeerCertSha256
         };
     }
 }
@@ -388,7 +391,8 @@ class RealityStreamSettings extends CommonClass {
         fingerprint = '',
         serverName = '',
         shortId = '',
-        spiderX = '/'
+        spiderX = '',
+        mldsa65Verify = ''
     ) {
         super();
         this.publicKey = publicKey;
@@ -396,6 +400,7 @@ class RealityStreamSettings extends CommonClass {
         this.serverName = serverName;
         this.shortId = shortId
         this.spiderX = spiderX;
+        this.mldsa65Verify = mldsa65Verify;
     }
     static fromJson(json = {}) {
         return new RealityStreamSettings(
@@ -404,6 +409,7 @@ class RealityStreamSettings extends CommonClass {
             json.serverName,
             json.shortId,
             json.spiderX,
+            json.mldsa65Verify
         );
     }
     toJson() {
@@ -413,7 +419,104 @@ class RealityStreamSettings extends CommonClass {
             serverName: this.serverName,
             shortId: this.shortId,
             spiderX: this.spiderX,
+            mldsa65Verify: this.mldsa65Verify
         };
+    }
+};
+
+class HysteriaStreamSettings extends CommonClass {
+    constructor(
+        version = 2,
+        auth = '',
+        congestion = '',
+        up = '0',
+        down = '0',
+        udphopPort = '',
+        udphopIntervalMin = 30,
+        udphopIntervalMax = 30,
+        initStreamReceiveWindow = 8388608,
+        maxStreamReceiveWindow = 8388608,
+        initConnectionReceiveWindow = 20971520,
+        maxConnectionReceiveWindow = 20971520,
+        maxIdleTimeout = 30,
+        keepAlivePeriod = 0,
+        disablePathMTUDiscovery = false
+    ) {
+        super();
+        this.version = version;
+        this.auth = auth;
+        this.congestion = congestion;
+        this.up = up;
+        this.down = down;
+        this.udphopPort = udphopPort;
+        this.udphopIntervalMin = udphopIntervalMin;
+        this.udphopIntervalMax = udphopIntervalMax;
+        this.initStreamReceiveWindow = initStreamReceiveWindow;
+        this.maxStreamReceiveWindow = maxStreamReceiveWindow;
+        this.initConnectionReceiveWindow = initConnectionReceiveWindow;
+        this.maxConnectionReceiveWindow = maxConnectionReceiveWindow;
+        this.maxIdleTimeout = maxIdleTimeout;
+        this.keepAlivePeriod = keepAlivePeriod;
+        this.disablePathMTUDiscovery = disablePathMTUDiscovery;
+    }
+
+    static fromJson(json = {}) {
+        let udphopPort = '';
+        let udphopIntervalMin = 30;
+        let udphopIntervalMax = 30;
+        if (json.udphop) {
+            udphopPort = json.udphop.port || '';
+            // Backward compatibility: if old 'interval' exists, use it for both min/max
+            if (json.udphop.interval !== undefined) {
+                udphopIntervalMin = json.udphop.interval;
+                udphopIntervalMax = json.udphop.interval;
+            } else {
+                udphopIntervalMin = json.udphop.intervalMin || 30;
+                udphopIntervalMax = json.udphop.intervalMax || 30;
+            }
+        }
+        return new HysteriaStreamSettings(
+            json.version,
+            json.auth,
+            json.congestion,
+            json.up,
+            json.down,
+            udphopPort,
+            udphopIntervalMin,
+            udphopIntervalMax,
+            json.initStreamReceiveWindow,
+            json.maxStreamReceiveWindow,
+            json.initConnectionReceiveWindow,
+            json.maxConnectionReceiveWindow,
+            json.maxIdleTimeout,
+            json.keepAlivePeriod,
+            json.disablePathMTUDiscovery
+        );
+    }
+
+    toJson() {
+        const result = {
+            version: this.version,
+            auth: this.auth,
+            congestion: this.congestion,
+            up: this.up,
+            down: this.down,
+            initStreamReceiveWindow: this.initStreamReceiveWindow,
+            maxStreamReceiveWindow: this.maxStreamReceiveWindow,
+            initConnectionReceiveWindow: this.initConnectionReceiveWindow,
+            maxConnectionReceiveWindow: this.maxConnectionReceiveWindow,
+            maxIdleTimeout: this.maxIdleTimeout,
+            keepAlivePeriod: this.keepAlivePeriod,
+            disablePathMTUDiscovery: this.disablePathMTUDiscovery
+        };
+        if (this.udphopPort) {
+            result.udphop = {
+                port: this.udphopPort,
+                intervalMin: this.udphopIntervalMin,
+                intervalMax: this.udphopIntervalMax
+            };
+        }
+        return result;
     }
 };
 class SockoptStreamSettings extends CommonClass {
@@ -424,6 +527,7 @@ class SockoptStreamSettings extends CommonClass {
         tcpMptcp = false,
         penetrate = false,
         addressPortStrategy = Address_Port_Strategy.NONE,
+        trustedXForwardedFor = [],
     ) {
         super();
         this.dialerProxy = dialerProxy;
@@ -432,6 +536,7 @@ class SockoptStreamSettings extends CommonClass {
         this.tcpMptcp = tcpMptcp;
         this.penetrate = penetrate;
         this.addressPortStrategy = addressPortStrategy;
+        this.trustedXForwardedFor = trustedXForwardedFor;
     }
 
     static fromJson(json = {}) {
@@ -442,12 +547,13 @@ class SockoptStreamSettings extends CommonClass {
             json.tcpKeepAliveInterval,
             json.tcpMptcp,
             json.penetrate,
-            json.addressPortStrategy
+            json.addressPortStrategy,
+            json.trustedXForwardedFor || []
         );
     }
 
     toJson() {
-        return {
+        const result = {
             dialerProxy: this.dialerProxy,
             tcpFastOpen: this.tcpFastOpen,
             tcpKeepAliveInterval: this.tcpKeepAliveInterval,
@@ -455,6 +561,70 @@ class SockoptStreamSettings extends CommonClass {
             penetrate: this.penetrate,
             addressPortStrategy: this.addressPortStrategy
         };
+        if (this.trustedXForwardedFor && this.trustedXForwardedFor.length > 0) {
+            result.trustedXForwardedFor = this.trustedXForwardedFor;
+        }
+        return result;
+    }
+}
+
+class UdpMask extends CommonClass {
+    constructor(type = 'salamander', settings = {}) {
+        super();
+        this.type = type;
+        this.settings = this._getDefaultSettings(type, settings);
+    }
+
+    _getDefaultSettings(type, settings = {}) {
+        switch (type) {
+            case 'salamander':
+            case 'mkcp-aes128gcm':
+                return { password: settings.password || '' };
+            case 'header-dns':
+            case 'xdns':
+                return { domain: settings.domain || '' };
+            case 'mkcp-original':
+            case 'header-dtls':
+            case 'header-srtp':
+            case 'header-utp':
+            case 'header-wechat':
+            case 'header-wireguard':
+                return {}; // No settings needed
+            default:
+                return settings;
+        }
+    }
+
+    static fromJson(json = {}) {
+        return new UdpMask(
+            json.type || 'salamander',
+            json.settings || {}
+        );
+    }
+
+    toJson() {
+        return {
+            type: this.type,
+            settings: (this.settings && Object.keys(this.settings).length > 0) ? this.settings : undefined
+        };
+    }
+}
+
+class FinalMaskStreamSettings extends CommonClass {
+    constructor(udp = []) {
+        super();
+        this.udp = Array.isArray(udp) ? udp.map(u => new UdpMask(u.type, u.settings)) : [new UdpMask(udp.type, udp.settings)];
+    }
+
+    static fromJson(json = {}) {
+        return new FinalMaskStreamSettings(json.udp || []);
+    }
+
+    toJson() {
+        return {
+            udp: this.udp.map(udp => udp.toJson())
+        };
+
     }
 }
 
@@ -470,6 +640,8 @@ class StreamSettings extends CommonClass {
         grpcSettings = new GrpcStreamSettings(),
         httpupgradeSettings = new HttpUpgradeStreamSettings(),
         xhttpSettings = new xHTTPStreamSettings(),
+        hysteriaSettings = new HysteriaStreamSettings(),
+        finalmask = new FinalMaskStreamSettings(),
         sockopt = undefined,
     ) {
         super();
@@ -483,7 +655,23 @@ class StreamSettings extends CommonClass {
         this.grpc = grpcSettings;
         this.httpupgrade = httpupgradeSettings;
         this.xhttp = xhttpSettings;
+        this.hysteria = hysteriaSettings;
+        this.finalmask = finalmask;
         this.sockopt = sockopt;
+    }
+
+    addUdpMask(type = 'salamander') {
+        this.finalmask.udp.push(new UdpMask(type));
+    }
+
+    delUdpMask(index) {
+        if (this.finalmask.udp) {
+            this.finalmask.udp.splice(index, 1);
+        }
+    }
+
+    get hasFinalMask() {
+        return this.finalmask.udp && this.finalmask.udp.length > 0;
     }
 
     get isTls() {
@@ -514,6 +702,8 @@ class StreamSettings extends CommonClass {
             GrpcStreamSettings.fromJson(json.grpcSettings),
             HttpUpgradeStreamSettings.fromJson(json.httpupgradeSettings),
             xHTTPStreamSettings.fromJson(json.xhttpSettings),
+            HysteriaStreamSettings.fromJson(json.hysteriaSettings),
+            FinalMaskStreamSettings.fromJson(json.finalmask),
             SockoptStreamSettings.fromJson(json.sockopt),
         );
     }
@@ -531,6 +721,8 @@ class StreamSettings extends CommonClass {
             grpcSettings: network === 'grpc' ? this.grpc.toJson() : undefined,
             httpupgradeSettings: network === 'httpupgrade' ? this.httpupgrade.toJson() : undefined,
             xhttpSettings: network === 'xhttp' ? this.xhttp.toJson() : undefined,
+            hysteriaSettings: network === 'hysteria' ? this.hysteria.toJson() : undefined,
+            finalmask: this.hasFinalMask ? this.finalmask.toJson() : undefined,
             sockopt: this.sockopt != undefined ? this.sockopt.toJson() : undefined,
         };
     }
@@ -594,7 +786,8 @@ class Outbound extends CommonClass {
     }
 
     canEnableTls() {
-        if (![Protocols.VMess, Protocols.VLESS, Protocols.Trojan, Protocols.Shadowsocks].includes(this.protocol)) return false;
+        if (![Protocols.VMess, Protocols.VLESS, Protocols.Trojan, Protocols.Shadowsocks, Protocols.Hysteria].includes(this.protocol)) return false;
+        if (this.protocol === Protocols.Hysteria) return this.stream.network === 'hysteria';
         return ["tcp", "ws", "http", "grpc", "httpupgrade", "xhttp"].includes(this.stream.network);
     }
 
@@ -606,25 +799,44 @@ class Outbound extends CommonClass {
         return false;
     }
 
+    // Vision seed applies only when vision flow is selected
+    canEnableVisionSeed() {
+        if (!this.canEnableTlsFlow()) return false;
+        const flow = this.settings?.flow;
+        return flow === TLS_FLOW_CONTROL.VISION || flow === TLS_FLOW_CONTROL.VISION_UDP443;
+    }
+
     canEnableReality() {
         if (![Protocols.VLESS, Protocols.Trojan].includes(this.protocol)) return false;
         return ["tcp", "http", "grpc", "xhttp"].includes(this.stream.network);
     }
 
     canEnableStream() {
-        return [Protocols.VMess, Protocols.VLESS, Protocols.Trojan, Protocols.Shadowsocks].includes(this.protocol);
+        return [Protocols.VMess, Protocols.VLESS, Protocols.Trojan, Protocols.Shadowsocks, Protocols.Hysteria].includes(this.protocol);
     }
 
     canEnableMux() {
-        if (this.settings.flow && this.settings.flow != '') {
+        // Disable Mux if flow is set
+        if (this.settings.flow && this.settings.flow !== '') {
             this.mux.enabled = false;
             return false;
         }
-        return [Protocols.VMess, Protocols.VLESS, Protocols.Trojan, Protocols.Shadowsocks, Protocols.HTTP, Protocols.Socks].includes(this.protocol);
-    }
 
-    hasVnext() {
-        return [Protocols.VMess, Protocols.VLESS].includes(this.protocol);
+        // Disable Mux if network is xhttp
+        if (this.stream.network === 'xhttp') {
+            this.mux.enabled = false;
+            return false;
+        }
+
+        // Allow Mux only for these protocols
+        return [
+            Protocols.VMess,
+            Protocols.VLESS,
+            Protocols.Trojan,
+            Protocols.Shadowsocks,
+            Protocols.HTTP,
+            Protocols.Socks
+        ].includes(this.protocol);
     }
 
     hasServers() {
@@ -639,7 +851,8 @@ class Outbound extends CommonClass {
             Protocols.Trojan,
             Protocols.Shadowsocks,
             Protocols.Socks,
-            Protocols.HTTP
+            Protocols.HTTP,
+            Protocols.Hysteria
         ].includes(this.protocol);
     }
 
@@ -666,13 +879,15 @@ class Outbound extends CommonClass {
             if (this.stream?.sockopt)
                 stream = { sockopt: this.stream.sockopt.toJson() };
         }
+        let settingsOut = this.settings instanceof CommonClass ? this.settings.toJson() : this.settings;
         return {
-            tag: this.tag == '' ? undefined : this.tag,
             protocol: this.protocol,
-            settings: this.settings instanceof CommonClass ? this.settings.toJson() : this.settings,
-            streamSettings: stream,
-            sendThrough: this.sendThrough != "" ? this.sendThrough : undefined,
-            mux: this.mux?.enabled ? this.mux : undefined,
+            settings: settingsOut,
+            // Only include tag, streamSettings, sendThrough, mux if present and not empty
+            ...(this.tag ? { tag: this.tag } : {}),
+            ...(stream ? { streamSettings: stream } : {}),
+            ...(this.sendThrough ? { sendThrough: this.sendThrough } : {}),
+            ...(this.mux?.enabled ? { mux: this.mux } : {}),
         };
     }
 
@@ -686,6 +901,9 @@ class Outbound extends CommonClass {
             case Protocols.Trojan:
             case 'ss':
                 return this.fromParamLink(link);
+            case 'hysteria2':
+            case Protocols.Hysteria:
+                return this.fromHysteriaLink(link);
             default:
                 return null;
         }
@@ -762,7 +980,8 @@ class Outbound extends CommonClass {
             let alpn = url.searchParams.get('alpn');
             let allowInsecure = url.searchParams.get('allowInsecure');
             let sni = url.searchParams.get('sni') ?? '';
-            stream.tls = new TlsStreamSettings(sni, alpn ? alpn.split(',') : [], fp, allowInsecure == 1);
+            let ech = url.searchParams.get('ech') ?? '';
+            stream.tls = new TlsStreamSettings(sni, alpn ? alpn.split(',') : [], fp, allowInsecure == 1, ech);
         }
 
         if (security == 'reality') {
@@ -771,7 +990,8 @@ class Outbound extends CommonClass {
             let sni = url.searchParams.get('sni') ?? '';
             let sid = url.searchParams.get('sid') ?? '';
             let spx = url.searchParams.get('spx') ?? '';
-            stream.reality = new RealityStreamSettings(pbk, fp, sni, sid, spx);
+            let pqv = url.searchParams.get('pqv') ?? '';
+            stream.reality = new RealityStreamSettings(pbk, fp, sni, sid, spx, pqv);
         }
 
         const regex = /([^@]+):\/\/([^@]+)@(.+):(\d+)(.*)$/;
@@ -787,7 +1007,7 @@ class Outbound extends CommonClass {
         var settings;
         switch (protocol) {
             case Protocols.VLESS:
-                settings = new Outbound.VLESSSettings(address, port, userData, url.searchParams.get('flow') ?? '');
+                settings = new Outbound.VLESSSettings(address, port, userData, url.searchParams.get('flow') ?? '', url.searchParams.get('encryption') ?? 'none');
                 break;
             case Protocols.Trojan:
                 settings = new Outbound.TrojanSettings(address, port, userData);
@@ -803,6 +1023,70 @@ class Outbound extends CommonClass {
         // Remove '#' from url.hash
         remark = remark.length > 0 ? remark.substring(1) : 'out-' + protocol + '-' + port;
         return new Outbound(remark, protocol, settings, stream);
+    }
+
+    static fromHysteriaLink(link) {
+        // Parse hysteria2://password@address:port[?param1=value1&param2=value2...][#remarks]
+        const regex = /^hysteria2?:\/\/([^@]+)@([^:?#]+):(\d+)([^#]*)(#.*)?$/;
+        const match = link.match(regex);
+
+        if (!match) return null;
+
+        let [, password, address, port, params, hash] = match;
+        port = parseInt(port);
+
+        // Parse URL parameters if present
+        let urlParams = new URLSearchParams(params);
+
+        // Create stream settings with hysteria network
+        let stream = new StreamSettings('hysteria', 'none');
+
+        // Set hysteria stream settings
+        stream.hysteria.auth = password;
+        stream.hysteria.congestion = urlParams.get('congestion') ?? '';
+        stream.hysteria.up = urlParams.get('up') ?? '0';
+        stream.hysteria.down = urlParams.get('down') ?? '0';
+        stream.hysteria.udphopPort = urlParams.get('udphopPort') ?? '';
+        // Support both old single interval and new min/max range
+        if (urlParams.has('udphopInterval')) {
+            const interval = parseInt(urlParams.get('udphopInterval'));
+            stream.hysteria.udphopIntervalMin = interval;
+            stream.hysteria.udphopIntervalMax = interval;
+        } else {
+            stream.hysteria.udphopIntervalMin = parseInt(urlParams.get('udphopIntervalMin') ?? '30');
+            stream.hysteria.udphopIntervalMax = parseInt(urlParams.get('udphopIntervalMax') ?? '30');
+        }
+
+        // Optional QUIC parameters
+        if (urlParams.has('initStreamReceiveWindow')) {
+            stream.hysteria.initStreamReceiveWindow = parseInt(urlParams.get('initStreamReceiveWindow'));
+        }
+        if (urlParams.has('maxStreamReceiveWindow')) {
+            stream.hysteria.maxStreamReceiveWindow = parseInt(urlParams.get('maxStreamReceiveWindow'));
+        }
+        if (urlParams.has('initConnectionReceiveWindow')) {
+            stream.hysteria.initConnectionReceiveWindow = parseInt(urlParams.get('initConnectionReceiveWindow'));
+        }
+        if (urlParams.has('maxConnectionReceiveWindow')) {
+            stream.hysteria.maxConnectionReceiveWindow = parseInt(urlParams.get('maxConnectionReceiveWindow'));
+        }
+        if (urlParams.has('maxIdleTimeout')) {
+            stream.hysteria.maxIdleTimeout = parseInt(urlParams.get('maxIdleTimeout'));
+        }
+        if (urlParams.has('keepAlivePeriod')) {
+            stream.hysteria.keepAlivePeriod = parseInt(urlParams.get('keepAlivePeriod'));
+        }
+        if (urlParams.has('disablePathMTUDiscovery')) {
+            stream.hysteria.disablePathMTUDiscovery = urlParams.get('disablePathMTUDiscovery') === 'true';
+        }
+
+        // Create settings
+        let settings = new Outbound.HysteriaSettings(address, port, 2);
+
+        // Extract remark from hash
+        let remark = hash ? decodeURIComponent(hash.substring(1)) : `out-hysteria-${port}`;
+
+        return new Outbound(remark, Protocols.Hysteria, settings, stream);
     }
 }
 
@@ -824,6 +1108,7 @@ Outbound.Settings = class extends CommonClass {
             case Protocols.Socks: return new Outbound.SocksSettings();
             case Protocols.HTTP: return new Outbound.HttpSettings();
             case Protocols.Wireguard: return new Outbound.WireguardSettings();
+            case Protocols.Hysteria: return new Outbound.HysteriaSettings();
             default: return null;
         }
     }
@@ -840,6 +1125,7 @@ Outbound.Settings = class extends CommonClass {
             case Protocols.Socks: return Outbound.SocksSettings.fromJson(json);
             case Protocols.HTTP: return Outbound.HttpSettings.fromJson(json);
             case Protocols.Wireguard: return Outbound.WireguardSettings.fromJson(json);
+            case Protocols.Hysteria: return Outbound.HysteriaSettings.fromJson(json);
             default: return null;
         }
     }
@@ -882,7 +1168,7 @@ Outbound.FreedomSettings = class extends CommonClass {
     toJson() {
         return {
             domainStrategy: ObjectUtil.isEmpty(this.domainStrategy) ? undefined : this.domainStrategy,
-            redirect: ObjectUtil.isEmpty(this.redirect) ? undefined: this.redirect,
+            redirect: ObjectUtil.isEmpty(this.redirect) ? undefined : this.redirect,
             fragment: Object.keys(this.fragment).length === 0 ? undefined : this.fragment,
             noises: this.noises.length === 0 ? undefined : Outbound.FreedomSettings.Noise.toJsonArray(this.noises),
         };
@@ -893,12 +1179,14 @@ Outbound.FreedomSettings.Fragment = class extends CommonClass {
     constructor(
         packets = '1-3',
         length = '',
-        interval = ''
+        interval = '',
+        maxSplit = ''
     ) {
         super();
         this.packets = packets;
         this.length = length;
         this.interval = interval;
+        this.maxSplit = maxSplit;
     }
 
     static fromJson(json = {}) {
@@ -906,6 +1194,7 @@ Outbound.FreedomSettings.Fragment = class extends CommonClass {
             json.packets,
             json.length,
             json.interval,
+            json.maxSplit
         );
     }
 };
@@ -914,12 +1203,14 @@ Outbound.FreedomSettings.Noise = class extends CommonClass {
     constructor(
         type = 'rand',
         packet = '10-20',
-        delay = '10-16'
+        delay = '10-16',
+        applyTo = 'ip'
     ) {
         super();
         this.type = type;
         this.packet = packet;
         this.delay = delay;
+        this.applyTo = applyTo;
     }
 
     static fromJson(json = {}) {
@@ -927,6 +1218,7 @@ Outbound.FreedomSettings.Noise = class extends CommonClass {
             json.type,
             json.packet,
             json.delay,
+            json.applyTo
         );
     }
 
@@ -935,6 +1227,7 @@ Outbound.FreedomSettings.Noise = class extends CommonClass {
             type: this.type,
             packet: this.packet,
             delay: this.delay,
+            applyTo: this.applyTo
         };
     }
 };
@@ -962,7 +1255,7 @@ Outbound.DNSSettings = class extends CommonClass {
         network = 'udp',
         address = '',
         port = 53,
-        nonIPQuery = 'drop',
+        nonIPQuery = 'reject',
         blockTypes = []
     ) {
         super();
@@ -993,13 +1286,16 @@ Outbound.VmessSettings = class extends CommonClass {
     }
 
     static fromJson(json = {}) {
-        if (ObjectUtil.isArrEmpty(json.vnext)) return new Outbound.VmessSettings();
-        return new Outbound.VmessSettings(
-            json.vnext[0].address,
-            json.vnext[0].port,
-            json.vnext[0].users[0].id,
-            json.vnext[0].users[0].security,
-        );
+        if (!ObjectUtil.isArrEmpty(json.vnext)) {
+            const v = json.vnext[0] || {};
+            const u = ObjectUtil.isArrEmpty(v.users) ? {} : v.users[0];
+            return new Outbound.VmessSettings(
+                v.address,
+                v.port,
+                u.id,
+                u.security,
+            );
+        }
     }
 
     toJson() {
@@ -1007,40 +1303,57 @@ Outbound.VmessSettings = class extends CommonClass {
             vnext: [{
                 address: this.address,
                 port: this.port,
-                users: [{ id: this.id, security: this.security }],
-            }],
+                users: [{
+                    id: this.id,
+                    security: this.security
+                }]
+            }]
         };
     }
 };
 Outbound.VLESSSettings = class extends CommonClass {
-    constructor(address, port, id, flow, encryption = 'none') {
+    constructor(address, port, id, flow, encryption, testpre = 0, testseed = [900, 500, 900, 256]) {
         super();
         this.address = address;
         this.port = port;
         this.id = id;
         this.flow = flow;
-        this.encryption = encryption
+        this.encryption = encryption;
+        this.testpre = testpre;
+        this.testseed = testseed;
     }
 
     static fromJson(json = {}) {
-        if (ObjectUtil.isArrEmpty(json.vnext)) return new Outbound.VLESSSettings();
+        if (ObjectUtil.isEmpty(json.address) || ObjectUtil.isEmpty(json.port)) return new Outbound.VLESSSettings();
         return new Outbound.VLESSSettings(
-            json.vnext[0].address,
-            json.vnext[0].port,
-            json.vnext[0].users[0].id,
-            json.vnext[0].users[0].flow,
-            json.vnext[0].users[0].encryption,
+            json.address,
+            json.port,
+            json.id,
+            json.flow,
+            json.encryption,
+            json.testpre || 0,
+            json.testseed && json.testseed.length >= 4 ? json.testseed : [900, 500, 900, 256]
         );
     }
 
     toJson() {
-        return {
-            vnext: [{
-                address: this.address,
-                port: this.port,
-                users: [{ id: this.id, flow: this.flow, encryption: 'none', }],
-            }],
+        const result = {
+            address: this.address,
+            port: this.port,
+            id: this.id,
+            flow: this.flow,
+            encryption: this.encryption,
         };
+        // Only include Vision settings when flow is set
+        if (this.flow && this.flow !== '') {
+            if (this.testpre > 0) {
+                result.testpre = this.testpre;
+            }
+            if (this.testseed && this.testseed.length >= 4) {
+                result.testseed = this.testseed;
+            }
+        }
+        return result;
     }
 };
 Outbound.TrojanSettings = class extends CommonClass {
@@ -1260,6 +1573,32 @@ Outbound.WireguardSettings.Peer = class extends CommonClass {
             allowedIPs: this.allowedIPs ? this.allowedIPs : undefined,
             endpoint: this.endpoint,
             keepAlive: this.keepAlive ?? undefined,
+        };
+    }
+};
+
+Outbound.HysteriaSettings = class extends CommonClass {
+    constructor(address = '', port = 443, version = 2) {
+        super();
+        this.address = address;
+        this.port = port;
+        this.version = version;
+    }
+
+    static fromJson(json = {}) {
+        if (Object.keys(json).length === 0) return new Outbound.HysteriaSettings();
+        return new Outbound.HysteriaSettings(
+            json.address,
+            json.port,
+            json.version
+        );
+    }
+
+    toJson() {
+        return {
+            address: this.address,
+            port: this.port,
+            version: this.version
         };
     }
 };

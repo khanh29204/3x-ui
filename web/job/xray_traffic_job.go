@@ -2,13 +2,16 @@ package job
 
 import (
 	"encoding/json"
-	"x-ui/logger"
-	"x-ui/web/service"
-	"x-ui/xray"
+
+	"github.com/mhsanaei/3x-ui/v2/logger"
+	"github.com/mhsanaei/3x-ui/v2/web/service"
+	"github.com/mhsanaei/3x-ui/v2/web/websocket"
+	"github.com/mhsanaei/3x-ui/v2/xray"
 
 	"github.com/valyala/fasthttp"
 )
 
+// XrayTrafficJob collects and processes traffic statistics from Xray, updating the database and optionally informing external APIs.
 type XrayTrafficJob struct {
 	settingService  service.SettingService
 	xrayService     service.XrayService
@@ -16,10 +19,12 @@ type XrayTrafficJob struct {
 	outboundService service.OutboundService
 }
 
+// NewXrayTrafficJob creates a new traffic collection job instance.
 func NewXrayTrafficJob() *XrayTrafficJob {
 	return new(XrayTrafficJob)
 }
 
+// Run collects traffic statistics from Xray and updates the database, triggering restart if needed.
 func (j *XrayTrafficJob) Run() {
 	if !j.xrayService.IsXrayRunning() {
 		return
@@ -44,6 +49,45 @@ func (j *XrayTrafficJob) Run() {
 	if needRestart0 || needRestart1 {
 		j.xrayService.SetToNeedRestart()
 	}
+
+	// Get online clients and last online map for real-time status updates
+	onlineClients := j.inboundService.GetOnlineClients()
+	lastOnlineMap, err := j.inboundService.GetClientsLastOnline()
+	if err != nil {
+		logger.Warning("get clients last online failed:", err)
+		lastOnlineMap = make(map[string]int64)
+	}
+
+	// Fetch updated inbounds from database with accumulated traffic values
+	// This ensures frontend receives the actual total traffic, not just delta values
+	updatedInbounds, err := j.inboundService.GetAllInbounds()
+	if err != nil {
+		logger.Warning("get all inbounds for websocket failed:", err)
+	}
+
+	updatedOutbounds, err := j.outboundService.GetOutboundsTraffic()
+	if err != nil {
+		logger.Warning("get all outbounds for websocket failed:", err)
+	}
+
+	// Broadcast traffic update via WebSocket with accumulated values from database
+	trafficUpdate := map[string]interface{}{
+		"traffics":       traffics,
+		"clientTraffics": clientTraffics,
+		"onlineClients":  onlineClients,
+		"lastOnlineMap":  lastOnlineMap,
+	}
+	websocket.BroadcastTraffic(trafficUpdate)
+
+	// Broadcast full inbounds update for real-time UI refresh
+	if updatedInbounds != nil {
+		websocket.BroadcastInbounds(updatedInbounds)
+	}
+
+	if updatedOutbounds != nil {
+		websocket.BroadcastOutbounds(updatedOutbounds)
+	}
+
 }
 
 func (j *XrayTrafficJob) informTrafficToExternalAPI(inboundTraffics []*xray.Traffic, clientTraffics []*xray.ClientTraffic) {
