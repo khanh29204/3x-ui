@@ -1,6 +1,6 @@
 services:
   3x-ui:
-    image: quockhanh2924/3x-ui:latest
+    image: quockhanh2004/3x-ui:latest
     container_name: 3x-ui
     hostname: server
     volumes:
