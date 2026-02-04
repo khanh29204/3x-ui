@@ -17,7 +17,7 @@ targets=(
   "linux arm 6"
   "linux arm 7"
   "linux s390x"
-  "windows amd64"
+  # "windows amd64"
 )
 
 ENTRYPOINT="."
