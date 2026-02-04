@@ -36,8 +36,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: |
-            hsanaeii/3x-ui
+          images:
             quockhanh2004/3x-ui
           tags: |
             type=ref,event=branch
